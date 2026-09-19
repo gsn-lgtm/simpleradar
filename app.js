@@ -123,10 +123,9 @@
       maxZoom: 12
     }).setView([current.lat, current.lon], 8);
 
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-      attribution: "&copy; OSM &copy; CARTO",
-      subdomains: "abcd",
-      maxZoom: 18
+    L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}", {
+      attribution: "Tiles \u00a9 Esri",
+      maxZoom: 16
     }).addTo(map);
 
     marker = L.circleMarker([current.lat, current.lon], {
@@ -351,7 +350,7 @@
         const url = `https://geocoding-api.open-meteo.com/v1/reverse?latitude=${lat}&longitude=${lon}&language=en&format=json`;
         const data = await (await fetch(url)).json();
         if (data && data.name) {
-          name = [data.name, data.admin1].filter(Boolean).join(", ");
+      name = [data.name, data.admin1].filter(Boolean).join(", ");
         }
       } catch (_) {}
       moveTo(lat, lon, name, 9);
