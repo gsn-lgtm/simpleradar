@@ -1,10 +1,4 @@
 (() => {
-  const FALLBACK = {
-    lat: 33.4054,
-    lon: -86.8114,
-    name: "Current area"
-  };
-
   const WX = {
     0: ["Clear", "\u2600\uFE0F"],
     1: ["Mostly clear", "\uD83C\uDF24\uFE0F"],
@@ -40,6 +34,7 @@
   const toastEl = $("toast");
   const resultsEl = $("results");
   const alertsEl = $("alerts");
+  const gateEl = $("locGate");
 
   let map;
   let marker;
@@ -49,8 +44,9 @@
   let radarLayer = null;
   let playing = false;
   let timer = null;
-  let current = loadSavedPlace() || { ...FALLBACK };
+  let current = loadSavedPlace() || { lat: 39.8283, lon: -98.5795, name: "Finding you…" };
   let radarRange = 24;
+  let ready = false;
 
   function loadSavedPlace() {
     try {
@@ -68,7 +64,15 @@
     } catch (_) {}
   }
 
-  function toast(msg, ms = 2200) {
+  function hideGate() {
+    if (gateEl) gateEl.classList.add("hidden");
+  }
+
+  function showGate() {
+    if (gateEl) gateEl.classList.remove("hidden");
+  }
+
+  function toast(msg, ms = 2400) {
     toastEl.textContent = msg;
     toastEl.classList.add("show");
     setTimeout(() => toastEl.classList.remove("show"), ms);
@@ -137,7 +141,7 @@
       zoomControl: false,
       attributionControl: true,
       maxZoom: 12
-    }).setView([current.lat, current.lon], 8);
+    }).setView([current.lat, current.lon], current.name === "Finding you…" ? 4 : 8);
 
     L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}", {
       attribution: "Tiles \u00a9 Esri",
@@ -156,11 +160,17 @@
   function moveTo(lat, lon, name, zoom = 9) {
     current = { lat, lon, name };
     savePlace(current);
-    map.setView([lat, lon], zoom);
-    marker.setLatLng([lat, lon]);
+    if (map) {
+      map.setView([lat, lon], zoom);
+      marker.setLatLng([lat, lon]);
+    }
     $("placeName").textContent = name;
     loadWeather();
     loadAlerts();
+    if (!ready) {
+      ready = true;
+      loadRadar();
+    }
   }
 
   async function placeName(lat, lon) {
@@ -369,21 +379,20 @@
   function geoError(err) {
     const code = err && err.code;
     if (code === 1) {
-      toast("Allow Location for this site in iPhone Settings");
+      toast("Go to Settings → Safari → Location → Allow for this site");
     } else if (code === 3) {
-      toast("Location timed out. Tap the target button.");
+      toast("Location timed out. Try again.");
     } else {
-      toast("Couldn\u2019t get location. Tap the target button.");
+      toast("Couldn’t get GPS. Use Safari, not the GitHub app.");
     }
   }
 
-  function locate(opts = {}) {
-    const quiet = !!opts.quiet;
+  function locate() {
     if (!navigator.geolocation) {
-      if (!quiet) toast("Location not available on this device");
+      toast("This browser cannot share location");
       return Promise.resolve(false);
     }
-    if (!quiet) toast("Finding you\u2026");
+    toast("Finding you…");
     return new Promise((resolve) => {
       navigator.geolocation.getCurrentPosition(
         async (pos) => {
@@ -391,16 +400,18 @@
           const lon = pos.coords.longitude;
           const name = await placeName(lat, lon);
           moveTo(lat, lon, name, 9);
+          hideGate();
+          toast("Using your location");
           resolve(true);
         },
         (err) => {
-          if (!quiet) geoError(err);
+          geoError(err);
           resolve(false);
         },
         {
-          enableHighAccuracy: false,
-          timeout: 12000,
-          maximumAge: 60000
+          enableHighAccuracy: true,
+          timeout: 20000,
+          maximumAge: 0
         }
       );
     });
@@ -413,6 +424,8 @@
       showFrame(Number(e.target.value));
     });
     $("locateBtn").addEventListener("click", () => locate());
+    const useBtn = $("useLocationBtn");
+    if (useBtn) useBtn.addEventListener("click", () => locate());
     document.querySelectorAll(".pill").forEach((btn) => {
       btn.addEventListener("click", () => {
         const next = Number(btn.dataset.range);
@@ -438,6 +451,7 @@
     resultsEl.addEventListener("click", (e) => {
       const btn = e.target.closest("button[data-lat]");
       if (!btn) return;
+      hideGate();
       moveTo(Number(btn.dataset.lat), Number(btn.dataset.lon), btn.dataset.name, 8);
       $("search").value = "";
       resultsEl.classList.remove("open");
@@ -452,14 +466,13 @@
   async function start() {
     initMap();
     bind();
-    $("placeName").textContent = current.name || "Finding you\u2026";
-    await Promise.all([loadRadar(), loadWeather(), loadAlerts()]);
-    await locate({ quiet: true });
+    $("placeName").textContent = current.name || "Finding you…";
+    showGate();
     setInterval(loadRadar, 5 * 60 * 1000);
     setInterval(loadWeather, 10 * 60 * 1000);
     setInterval(loadAlerts, 5 * 60 * 1000);
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("./sw.js").catch(() => {});
+      navigator.serviceWorker.register("./sw.js?v=5").catch(() => {});
     }
   }
 
