@@ -10,7 +10,7 @@
   <title>SimpleRadar</title>
   <link rel="manifest" href="./manifest.json" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <link rel="stylesheet" href="./styles.css" />
+  <link rel="stylesheet" href="./styles.css?v=5" />
 </head>
 <body>
   <div id="map"></div>
@@ -35,8 +35,8 @@
     <div class="now">
       <div class="wx-icon" id="wxIcon">☁️</div>
       <div class="now-meta">
-        <h2 id="placeName">Hoover, Alabama</h2>
-        <p id="condition">Loading current conditions…</p>
+        <h2 id="placeName">Finding you…</h2>
+        <p id="condition">Allow location to load local weather</p>
       </div>
       <div class="now-temp" id="temp">--<span>°</span></div>
     </div>
@@ -65,8 +65,15 @@
     </div>
     <p class="hint">24-hr radar: Iowa State NEXRAD · 2-hr: RainViewer · Forecast: Open-Meteo</p>
   </section>
+  <div id="locGate" class="loc-gate">
+    <div class="loc-card">
+      <h3>Show weather where you are</h3>
+      <p>iPhone only shares GPS after you tap this button, then Allow.</p>
+      <button type="button" id="useLocationBtn">Use my current location</button>
+    </div>
+  </div>
   <div id="toast" class="toast"></div>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="./app.js"></script>
+  <script src="./app.js?v=5"></script>
 </body>
 </html>
