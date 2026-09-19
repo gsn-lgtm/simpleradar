@@ -1,4 +1,4 @@
-const CACHE = "simpleradar-v3";
+const CACHE = "simpleradar-v4";
 const SHELL = [
   "./",
   "./index.html",
