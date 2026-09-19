@@ -1,0 +1,11 @@
+{
+  "name": "SimpleRadar",
+  "short_name": "SimpleRadar",
+  "description": "Live weather radar without the clutter.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0B1220",
+  "theme_color": "#0B1220"
+}
