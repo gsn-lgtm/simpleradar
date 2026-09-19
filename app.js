@@ -1,8 +1,8 @@
 (() => {
-  const DEFAULT = {
+  const FALLBACK = {
     lat: 33.4054,
     lon: -86.8114,
-    name: "Hoover, Alabama"
+    name: "Current area"
   };
 
   const WX = {
@@ -49,10 +49,26 @@
   let radarLayer = null;
   let playing = false;
   let timer = null;
-  let current = { ...DEFAULT };
+  let current = loadSavedPlace() || { ...FALLBACK };
   let radarRange = 24;
 
-  function toast(msg, ms = 1800) {
+  function loadSavedPlace() {
+    try {
+      const raw = localStorage.getItem("simpleradar-place");
+      if (!raw) return null;
+      const p = JSON.parse(raw);
+      if (typeof p.lat === "number" && typeof p.lon === "number") return p;
+    } catch (_) {}
+    return null;
+  }
+
+  function savePlace(place) {
+    try {
+      localStorage.setItem("simpleradar-place", JSON.stringify(place));
+    } catch (_) {}
+  }
+
+  function toast(msg, ms = 2200) {
     toastEl.textContent = msg;
     toastEl.classList.add("show");
     setTimeout(() => toastEl.classList.remove("show"), ms);
@@ -137,13 +153,27 @@
     }).addTo(map);
   }
 
-  function moveTo(lat, lon, name, zoom = 8) {
+  function moveTo(lat, lon, name, zoom = 9) {
     current = { lat, lon, name };
+    savePlace(current);
     map.setView([lat, lon], zoom);
     marker.setLatLng([lat, lon]);
     $("placeName").textContent = name;
     loadWeather();
     loadAlerts();
+  }
+
+  async function placeName(lat, lon) {
+    try {
+      const url = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`;
+      const data = await (await fetch(url)).json();
+      const city = data.city || data.locality || data.principalSubdivision;
+      const region = data.principalSubdivision;
+      if (city && region && city !== region) return `${city}, ${region}`;
+      if (city) return city;
+      if (region) return region;
+    } catch (_) {}
+    return "Your location";
   }
 
   async function loadRadar() {
@@ -294,7 +324,7 @@
     try {
       const res = await fetch(
         `https://api.weather.gov/alerts/active?point=${current.lat},${current.lon}`,
-        { headers: { "User-Agent": "SimpleRadar (personal-use weather app)", Accept: "application/geo+json" } }
+        { headers: { Accept: "application/geo+json" } }
       );
       if (!res.ok) return;
       const data = await res.json();
@@ -336,25 +366,44 @@
     }
   }
 
-  function locate() {
-    if (!navigator.geolocation) {
-      toast("Location not available");
-      return;
+  function geoError(err) {
+    const code = err && err.code;
+    if (code === 1) {
+      toast("Allow Location for this site in iPhone Settings");
+    } else if (code === 3) {
+      toast("Location timed out. Tap the target button.");
+    } else {
+      toast("Couldn\u2019t get location. Tap the target button.");
     }
-    toast("Finding you\u2026");
-    navigator.geolocation.getCurrentPosition(async (pos) => {
-      const lat = pos.coords.latitude;
-      const lon = pos.coords.longitude;
-      let name = `${lat.toFixed(2)}, ${lon.toFixed(2)}`;
-      try {
-        const url = `https://geocoding-api.open-meteo.com/v1/reverse?latitude=${lat}&longitude=${lon}&language=en&format=json`;
-        const data = await (await fetch(url)).json();
-        if (data && data.name) {
-      name = [data.name, data.admin1].filter(Boolean).join(", ");
+  }
+
+  function locate(opts = {}) {
+    const quiet = !!opts.quiet;
+    if (!navigator.geolocation) {
+      if (!quiet) toast("Location not available on this device");
+      return Promise.resolve(false);
+    }
+    if (!quiet) toast("Finding you\u2026");
+    return new Promise((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          const lat = pos.coords.latitude;
+          const lon = pos.coords.longitude;
+          const name = await placeName(lat, lon);
+          moveTo(lat, lon, name, 9);
+          resolve(true);
+        },
+        (err) => {
+          if (!quiet) geoError(err);
+          resolve(false);
+        },
+        {
+          enableHighAccuracy: false,
+          timeout: 12000,
+          maximumAge: 60000
         }
-      } catch (_) {}
-      moveTo(lat, lon, name, 9);
-    }, () => toast("Couldn\u2019t get location"), { enableHighAccuracy: true, timeout: 10000 });
+      );
+    });
   }
 
   function bind() {
@@ -363,7 +412,7 @@
       pause();
       showFrame(Number(e.target.value));
     });
-    $("locateBtn").addEventListener("click", locate);
+    $("locateBtn").addEventListener("click", () => locate());
     document.querySelectorAll(".pill").forEach((btn) => {
       btn.addEventListener("click", () => {
         const next = Number(btn.dataset.range);
@@ -403,8 +452,9 @@
   async function start() {
     initMap();
     bind();
-    $("placeName").textContent = current.name;
+    $("placeName").textContent = current.name || "Finding you\u2026";
     await Promise.all([loadRadar(), loadWeather(), loadAlerts()]);
+    await locate({ quiet: true });
     setInterval(loadRadar, 5 * 60 * 1000);
     setInterval(loadWeather, 10 * 60 * 1000);
     setInterval(loadAlerts, 5 * 60 * 1000);
