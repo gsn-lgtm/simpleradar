@@ -27,7 +27,11 @@ body {
 }
 .leaflet-control-attribution a { color: #9ec9c0 !important; }
 .leaflet-control-zoom { display: none; }
-.leaflet-tile-pane { filter: saturate(1.08) contrast(1.06); }
+.leaflet-tile-pane { filter: saturate(1.12) contrast(1.08); }
+.leaflet-tile {
+  image-rendering: auto !important;
+  -ms-interpolation-mode: bicubic;
+}
 .top-bar {
   position: absolute;
   top: calc(12px + var(--safe-top));
