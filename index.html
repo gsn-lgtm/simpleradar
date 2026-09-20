@@ -3,17 +3,18 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#0B1220" />
+  <meta name="theme-color" content="#071018" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="SimpleRadar" />
   <title>SimpleRadar</title>
   <link rel="manifest" href="./manifest.json" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <link rel="stylesheet" href="./styles.css?v=5" />
+  <link rel="stylesheet" href="./styles.css?v=6" />
 </head>
 <body>
   <div id="map"></div>
+
   <header class="top-bar">
     <div class="search-wrap">
       <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -28,52 +29,51 @@
       </svg>
     </button>
   </header>
+
   <div id="results" class="results"></div>
-  <div id="alerts" class="alert-banner"></div>
-  <section class="sheet">
-    <div class="handle"></div>
+  <div id="alerts" class="alert-banner" hidden></div>
+
+  <section class="sheet collapsed" id="sheet">
+    <button class="handle" id="sheetToggle" aria-label="Expand or hide weather panel"></button>
     <div class="now">
       <div class="wx-icon" id="wxIcon">☁️</div>
       <div class="now-meta">
         <h2 id="placeName">Finding you…</h2>
-        <p id="condition">Allow location to load local weather</p>
+        <p id="condition">Current conditions</p>
       </div>
       <div class="now-temp" id="temp">--<span>°</span></div>
     </div>
-    <div class="stats">
-      <div class="stat"><b id="feels">--</b><span>Feels like</span></div>
-      <div class="stat"><b id="wind">--</b><span>Wind</span></div>
-      <div class="stat"><b id="rain">--</b><span>Rain chance</span></div>
-    </div>
-    <div class="forecast" id="forecast"></div>
-    <div class="range-row">
-      <span class="range-label">Radar loop</span>
-      <div class="pills" role="tablist" aria-label="Radar duration">
-        <button type="button" class="pill" id="range2h" data-range="2">2 hr</button>
-        <button type="button" class="pill active" id="range24h" data-range="24">24 hr</button>
+    <div class="sheet-body">
+      <div class="stats">
+        <div class="stat"><b id="feels">--</b><span>Feels like</span></div>
+        <div class="stat"><b id="wind">--</b><span>Wind</span></div>
+        <div class="stat"><b id="rain">--</b><span>Rain next 24h</span></div>
+      </div>
+      <div class="section-label">Next 24 hours</div>
+      <div class="forecast" id="hourly"></div>
+      <div class="radar-controls">
+        <button class="play" id="playBtn" aria-label="Play radar">
+          <svg id="playIcon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+        </button>
+        <input class="slider" id="slider" type="range" min="0" max="0" value="0" />
+        <div class="time-label">
+          <b id="frameTime">Live radar</b>
+          <span id="frameHint">now</span>
+        </div>
       </div>
     </div>
-    <div class="radar-controls">
-      <button class="play" id="playBtn" aria-label="Play radar">
-        <svg id="playIcon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-      </button>
-      <input class="slider" id="slider" type="range" min="0" max="0" value="0" />
-      <div class="time-label">
-        <b id="frameTime">Radar</b>
-        <span id="frameHint">last 24 hours</span>
-      </div>
-    </div>
-    <p class="hint">24-hr radar: Iowa State NEXRAD · 2-hr: RainViewer · Forecast: Open-Meteo</p>
   </section>
+
   <div id="locGate" class="loc-gate">
     <div class="loc-card">
       <h3>Show weather where you are</h3>
-      <p>iPhone only shares GPS after you tap this button, then Allow.</p>
+      <p>Tap below, then Allow, so the map and forecast use your GPS pin.</p>
       <button type="button" id="useLocationBtn">Use my current location</button>
     </div>
   </div>
+
   <div id="toast" class="toast"></div>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="./app.js?v=5"></script>
+  <script src="./app.js?v=6"></script>
 </body>
 </html>
