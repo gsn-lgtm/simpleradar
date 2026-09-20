@@ -35,202 +35,120 @@
   const resultsEl = $("results");
   const alertsEl = $("alerts");
   const gateEl = $("locGate");
+  const sheetEl = $("sheet");
 
-  let map;
-  let marker;
-  let apiData = null;
+  let map, marker, apiData = null;
   let frames = [];
   let frameIndex = 0;
   let radarLayer = null;
   let playing = false;
   let timer = null;
-  let current = loadSavedPlace() || { lat: 39.8283, lon: -98.5795, name: "Finding you…" };
-  let radarRange = 24;
-  let ready = false;
+  let current = loadSavedPlace() || { lat: 39.8283, lon: -98.5795, name: "Finding you\u2026" };
+  let latestPastIndex = 0;
 
   function loadSavedPlace() {
     try {
-      const raw = localStorage.getItem("simpleradar-place");
-      if (!raw) return null;
-      const p = JSON.parse(raw);
-      if (typeof p.lat === "number" && typeof p.lon === "number") return p;
+      const p = JSON.parse(localStorage.getItem("simpleradar-place") || "");
+      if (p && typeof p.lat === "number" && typeof p.lon === "number") return p;
     } catch (_) {}
     return null;
   }
-
   function savePlace(place) {
-    try {
-      localStorage.setItem("simpleradar-place", JSON.stringify(place));
-    } catch (_) {}
+    try { localStorage.setItem("simpleradar-place", JSON.stringify(place)); } catch (_) {}
   }
+  function dismissedKey(id) { return `simpleradar-alert-${id}`; }
 
-  function hideGate() {
-    if (gateEl) gateEl.classList.add("hidden");
-  }
-
-  function showGate() {
-    if (gateEl) gateEl.classList.remove("hidden");
-  }
-
-  function toast(msg, ms = 2400) {
+  function toast(msg, ms = 2200) {
     toastEl.textContent = msg;
     toastEl.classList.add("show");
     setTimeout(() => toastEl.classList.remove("show"), ms);
   }
-
   function compass(deg) {
-    const dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
-    return dirs[Math.round(deg / 45) % 8];
+    return ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Math.round(deg / 45) % 8];
   }
+  function wxInfo(code) { return WX[code] || ["Conditions unavailable", "\uD83C\uDF21\uFE0F"]; }
 
-  function wxInfo(code) {
-    return WX[code] || ["Conditions unavailable", "\uD83C\uDF21\uFE0F"];
-  }
-
-  function formatFrameTime(unix) {
+  function formatFrameTime(unix, kind) {
     const d = new Date(unix * 1000);
-    const now = new Date();
-    const sameDay = d.toDateString() === now.toDateString();
     const time = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-    if (sameDay) return time;
-    const day = d.toLocaleDateString([], { weekday: "short" });
-    return `${day} ${time}`;
-  }
-
-  function pad(n) {
-    return String(n).padStart(2, "0");
-  }
-
-  function iemStamp(date) {
-    return (
-      date.getUTCFullYear() +
-      pad(date.getUTCMonth() + 1) +
-      pad(date.getUTCDate()) +
-      pad(date.getUTCHours()) +
-      pad(date.getUTCMinutes())
-    );
-  }
-
-  function buildIemFrames(hours = 24, stepMin = 10) {
-    const end = new Date();
-    end.setSeconds(0, 0);
-    end.setMinutes(end.getMinutes() - (end.getMinutes() % 5) - 10);
-    const start = new Date(end.getTime() - hours * 60 * 60 * 1000);
-    const out = [];
-    for (let t = start.getTime(); t <= end.getTime(); t += stepMin * 60 * 1000) {
-      const d = new Date(t);
-      d.setSeconds(0, 0);
-      const minutes = d.getUTCMinutes() - (d.getUTCMinutes() % 5);
-      d.setUTCMinutes(minutes);
-      out.push({
-        source: "iem",
-        time: Math.floor(d.getTime() / 1000),
-        stamp: iemStamp(d)
-      });
-    }
-    return out;
-  }
-
-  function weekday(dateStr) {
-    const d = new Date(dateStr + "T12:00:00");
-    return d.toLocaleDateString([], { weekday: "short" });
+    if (kind === "nowcast") return time;
+    return time;
   }
 
   function initMap() {
     map = L.map("map", {
       zoomControl: false,
       attributionControl: true,
-      maxZoom: 12
-    }).setView([current.lat, current.lon], current.name === "Finding you…" ? 4 : 8);
+      maxZoom: 13
+    }).setView([current.lat, current.lon], current.name === "Finding you\u2026" ? 4 : 9);
 
     L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}", {
       attribution: "Tiles \u00a9 Esri",
-      maxZoom: 16
+      maxZoom: 16,
+      detectRetina: true
+    }).addTo(map);
+
+    L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}", {
+      maxZoom: 16,
+      opacity: 0.9
     }).addTo(map);
 
     marker = L.circleMarker([current.lat, current.lon], {
-      radius: 7,
-      color: "#2ee6c8",
+      radius: 8,
+      color: "#3ce0c4",
       weight: 2,
-      fillColor: "#2ee6c8",
-      fillOpacity: 0.85
+      fillColor: "#3ce0c4",
+      fillOpacity: 0.9
     }).addTo(map);
   }
 
   function moveTo(lat, lon, name, zoom = 9) {
     current = { lat, lon, name };
     savePlace(current);
-    if (map) {
-      map.setView([lat, lon], zoom);
-      marker.setLatLng([lat, lon]);
-    }
+    map.setView([lat, lon], zoom);
+    marker.setLatLng([lat, lon]);
     $("placeName").textContent = name;
     loadWeather();
     loadAlerts();
-    if (!ready) {
-      ready = true;
-      loadRadar();
-    }
   }
 
   async function placeName(lat, lon) {
     try {
-      const url = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`;
-      const data = await (await fetch(url)).json();
+      const data = await (await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`)).json();
       const city = data.city || data.locality || data.principalSubdivision;
       const region = data.principalSubdivision;
       if (city && region && city !== region) return `${city}, ${region}`;
-      if (city) return city;
-      if (region) return region;
-    } catch (_) {}
-    return "Your location";
+      return city || region || "Your location";
+    } catch (_) {
+      return "Your location";
+    }
   }
 
   async function loadRadar() {
     pause();
-    if (radarLayer && map.hasLayer(radarLayer)) {
-      map.removeLayer(radarLayer);
-      radarLayer = null;
-    }
-    if (radarRange === 24) {
-      frames = buildIemFrames(24, 10);
-      $("frameHint").textContent = "last 24 hours";
-      if (!frames.length) {
-        $("frameTime").textContent = "No radar";
-        return;
-      }
-      $("slider").max = String(frames.length - 1);
-      frameIndex = frames.length - 1;
-      $("slider").value = String(frameIndex);
-      showFrame(frameIndex);
-      return;
-    }
     try {
       const res = await fetch("https://api.rainviewer.com/public/weather-maps.json");
       apiData = await res.json();
-      frames = ((apiData.radar && apiData.radar.past) ? apiData.radar.past : []).map((f) => ({
-        source: "rainviewer",
-        time: f.time,
-        path: f.path
-      }));
-      $("frameHint").textContent = "last 2 hours";
+      const past = (apiData.radar && apiData.radar.past) ? apiData.radar.past.slice(-9) : [];
+      const nowcast = (apiData.radar && apiData.radar.nowcast) ? apiData.radar.nowcast : [];
+      frames = [
+        ...past.map((f) => ({ ...f, kind: "past" })),
+        ...nowcast.map((f) => ({ ...f, kind: "nowcast" }))
+      ];
       if (!frames.length) {
         $("frameTime").textContent = "No radar";
         return;
       }
+      latestPastIndex = Math.max(0, past.length - 1);
       $("slider").max = String(frames.length - 1);
-      frameIndex = frames.length - 1;
-      $("slider").value = String(frameIndex);
+      frameIndex = latestPastIndex;
       showFrame(frameIndex);
-    } catch (err) {
+    } catch (_) {
       $("frameTime").textContent = "Radar offline";
     }
   }
 
   function radarUrl(frame) {
-    if (frame.source === "iem") {
-      return `https://mesonet.agron.iastate.edu/c/tile.py/1.0.0/ridge::USCOMP-N0Q-${frame.stamp}/{z}/{x}/{y}.png`;
-    }
     const size = window.devicePixelRatio >= 2 ? 512 : 256;
     return `${apiData.host}${frame.path}/${size}/{z}/{x}/{y}/2/1_1.png`;
   }
@@ -240,29 +158,25 @@
     frameIndex = Math.max(0, Math.min(frames.length - 1, index));
     const frame = frames[frameIndex];
     $("slider").value = String(frameIndex);
-    $("frameTime").textContent = formatFrameTime(frame.time);
-    const latest = frameIndex === frames.length - 1;
-    if (radarRange === 24) {
-      $("frameHint").textContent = latest ? "latest \u00b7 24 hr" : "past scan \u00b7 24 hr";
-    } else {
-      $("frameHint").textContent = latest ? "latest \u00b7 2 hr" : "past scan \u00b7 2 hr";
-    }
+    $("frameTime").textContent = formatFrameTime(frame.time, frame.kind);
+    if (frame.kind === "nowcast") $("frameHint").textContent = "forecast scan";
+    else if (frameIndex === latestPastIndex) $("frameHint").textContent = "live";
+    else $("frameHint").textContent = "recent scan";
 
     const layer = L.tileLayer(radarUrl(frame), {
-      opacity: 0.72,
+      opacity: 0.78,
       tileSize: 256,
-      maxNativeZoom: frame.source === "iem" ? 8 : 7,
-      maxZoom: 12,
-      attribution: frame.source === "iem" ? "Radar \u00a9 Iowa State IEM / NWS" : "Radar \u00a9 RainViewer"
+      zoomOffset: 0,
+      maxNativeZoom: 7,
+      maxZoom: 13,
+      detectRetina: true,
+      attribution: "Radar \u00a9 RainViewer"
     });
-
     layer.addTo(map);
     if (radarLayer) {
       const old = radarLayer;
       layer.once("load", () => map.removeLayer(old));
-      setTimeout(() => {
-        if (map.hasLayer(old)) map.removeLayer(old);
-      }, 1400);
+      setTimeout(() => { if (map.hasLayer(old)) map.removeLayer(old); }, 1200);
     }
     radarLayer = layer;
   }
@@ -273,19 +187,16 @@
     $("playIcon").innerHTML = '<path d="M7 6h3v12H7zm7 0h3v12h-3z"/>';
     step();
   }
-
   function pause() {
     playing = false;
     clearTimeout(timer);
     $("playIcon").innerHTML = '<path d="M8 5v14l11-7z"/>';
   }
-
   function step() {
     if (!playing) return;
     const next = frameIndex + 1 >= frames.length ? 0 : frameIndex + 1;
     showFrame(next);
-    const delay = next === frames.length - 1 ? 1100 : (radarRange === 24 ? 160 : 420);
-    timer = setTimeout(step, delay);
+    timer = setTimeout(step, next === latestPastIndex ? 900 : 380);
   }
 
   async function loadWeather() {
@@ -293,59 +204,69 @@
     url.searchParams.set("latitude", current.lat);
     url.searchParams.set("longitude", current.lon);
     url.searchParams.set("current", "temperature_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m,wind_direction_10m");
-    url.searchParams.set("daily", "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max");
+    url.searchParams.set("hourly", "temperature_2m,precipitation_probability,weather_code");
     url.searchParams.set("temperature_unit", "fahrenheit");
     url.searchParams.set("wind_speed_unit", "mph");
     url.searchParams.set("timezone", "auto");
-    url.searchParams.set("forecast_days", "7");
+    url.searchParams.set("forecast_hours", "24");
 
     try {
       const data = await (await fetch(url)).json();
       const cur = data.current || {};
-      const daily = data.daily || {};
+      const hourly = data.hourly || {};
       const [label, emoji] = wxInfo(cur.weather_code);
       $("temp").innerHTML = `${Math.round(cur.temperature_2m)}<span>\u00b0</span>`;
       $("condition").textContent = label;
       $("wxIcon").textContent = emoji;
       $("feels").textContent = `${Math.round(cur.apparent_temperature)}\u00b0`;
       $("wind").textContent = `${Math.round(cur.wind_speed_10m)} ${compass(cur.wind_direction_10m)}`;
-      const todayPop = daily.precipitation_probability_max ? daily.precipitation_probability_max[0] : null;
-      $("rain").textContent = todayPop == null ? "--" : `${todayPop}%`;
+      const pops = hourly.precipitation_probability || [];
+      const maxPop = pops.length ? Math.max(...pops) : null;
+      $("rain").textContent = maxPop == null ? "--" : `${maxPop}%`;
 
-      const html = (daily.time || []).map((day, i) => {
-        const [dLabel, dEmoji] = wxInfo(daily.weather_code[i]);
-        const pop = daily.precipitation_probability_max[i];
-        return `<div class="day" title="${dLabel}">
-          <div class="d">${i === 0 ? "Today" : weekday(day)}</div>
-          <div class="e">${dEmoji}</div>
-          <div class="t">${Math.round(daily.temperature_2m_max[i])}\u00b0 / ${Math.round(daily.temperature_2m_min[i])}\u00b0</div>
-          <div class="r">${pop ?? 0}%</div>
+      const now = Date.now();
+      $("hourly").innerHTML = (hourly.time || []).map((stamp, i) => {
+        const t = new Date(stamp);
+        const isNow = Math.abs(t.getTime() - now) < 45 * 60 * 1000;
+        const hourLabel = isNow ? "Now" : t.toLocaleTimeString([], { hour: "numeric" });
+        const [, icon] = wxInfo(hourly.weather_code[i]);
+        return `<div class="hour${isNow ? " is-now" : ""}">
+          <div class="d">${hourLabel}</div>
+          <div class="e">${icon}</div>
+          <div class="t">${Math.round(hourly.temperature_2m[i])}\u00b0</div>
+          <div class="r">${hourly.precipitation_probability[i] ?? 0}%</div>
         </div>`;
       }).join("");
-      $("forecast").innerHTML = html;
-    } catch (err) {
+    } catch (_) {
       $("condition").textContent = "Weather unavailable";
     }
   }
 
   async function loadAlerts() {
-    alertsEl.classList.remove("show");
+    alertsEl.hidden = true;
     alertsEl.innerHTML = "";
     try {
-      const res = await fetch(
-        `https://api.weather.gov/alerts/active?point=${current.lat},${current.lon}`,
-        { headers: { Accept: "application/geo+json" } }
-      );
+      const res = await fetch(`https://api.weather.gov/alerts/active?point=${current.lat},${current.lon}`, {
+        headers: { Accept: "application/geo+json" }
+      });
       if (!res.ok) return;
       const data = await res.json();
       const features = data.features || [];
       if (!features.length) return;
-      const top = features[0].properties || {};
-      alertsEl.innerHTML = `<div>
-        <strong>${top.event || "Weather alert"}</strong>
-        <p>${top.headline || top.description || "Active National Weather Service alert for this area."}</p>
-      </div>`;
-      alertsEl.classList.add("show");
+      const top = features[0];
+      const props = top.properties || {};
+      const id = props.id || top.id || props.event;
+      if (id && sessionStorage.getItem(dismissedKey(id))) return;
+      alertsEl.innerHTML = `<div class="alert-copy">
+        <strong>${props.event || "Weather alert"}</strong>
+        <p>${props.headline || props.description || "Active National Weather Service alert."}</p>
+      </div>
+      <button class="alert-close" type="button" aria-label="Dismiss alert">\u00d7</button>`;
+      alertsEl.hidden = false;
+      alertsEl.querySelector(".alert-close").addEventListener("click", () => {
+        if (id) sessionStorage.setItem(dismissedKey(id), "1");
+        alertsEl.hidden = true;
+      });
     } catch (_) {}
   }
 
@@ -355,9 +276,8 @@
       resultsEl.innerHTML = "";
       return;
     }
-    const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=6&language=en&format=json`;
     try {
-      const data = await (await fetch(url)).json();
+      const data = await (await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=6&language=en&format=json`)).json();
       const results = data.results || [];
       if (!results.length) {
         resultsEl.innerHTML = `<button type="button">No matches</button>`;
@@ -377,14 +297,8 @@
   }
 
   function geoError(err) {
-    const code = err && err.code;
-    if (code === 1) {
-      toast("Go to Settings → Safari → Location → Allow for this site");
-    } else if (code === 3) {
-      toast("Location timed out. Try again.");
-    } else {
-      toast("Couldn’t get GPS. Use Safari, not the GitHub app.");
-    }
+    if (err && err.code === 1) toast("Settings \u2192 Safari \u2192 Location \u2192 Allow this site");
+    else toast("Couldn\u2019t get GPS. Use Safari and tap Allow.");
   }
 
   function locate() {
@@ -392,28 +306,20 @@
       toast("This browser cannot share location");
       return Promise.resolve(false);
     }
-    toast("Finding you…");
+    toast("Finding you\u2026");
     return new Promise((resolve) => {
-      navigator.geolocation.getCurrentPosition(
-        async (pos) => {
-          const lat = pos.coords.latitude;
-          const lon = pos.coords.longitude;
-          const name = await placeName(lat, lon);
-          moveTo(lat, lon, name, 9);
-          hideGate();
-          toast("Using your location");
-          resolve(true);
-        },
-        (err) => {
-          geoError(err);
-          resolve(false);
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 20000,
-          maximumAge: 0
-        }
-      );
+      navigator.geolocation.getCurrentPosition(async (pos) => {
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
+        const name = await placeName(lat, lon);
+        moveTo(lat, lon, name, 10);
+        gateEl.classList.add("hidden");
+        toast("Using your location");
+        resolve(true);
+      }, (err) => {
+        geoError(err);
+        resolve(false);
+      }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
     });
   }
 
@@ -424,56 +330,38 @@
       showFrame(Number(e.target.value));
     });
     $("locateBtn").addEventListener("click", () => locate());
-    const useBtn = $("useLocationBtn");
-    if (useBtn) useBtn.addEventListener("click", () => locate());
-    document.querySelectorAll(".pill").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const next = Number(btn.dataset.range);
-        if (next === radarRange) return;
-        radarRange = next;
-        document.querySelectorAll(".pill").forEach((b) => b.classList.toggle("active", Number(b.dataset.range) === radarRange));
-        loadRadar();
-      });
-    });
+    $("useLocationBtn").addEventListener("click", () => locate());
+    $("sheetToggle").addEventListener("click", () => sheetEl.classList.toggle("collapsed"));
+    $("placeName").parentElement.addEventListener("click", () => sheetEl.classList.toggle("collapsed"));
 
     let t;
     $("search").addEventListener("input", (e) => {
       clearTimeout(t);
       t = setTimeout(() => searchPlaces(e.target.value), 280);
     });
-    $("search").addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        const first = resultsEl.querySelector("button[data-lat]");
-        if (first) first.click();
-      }
-    });
     resultsEl.addEventListener("click", (e) => {
       const btn = e.target.closest("button[data-lat]");
       if (!btn) return;
-      hideGate();
-      moveTo(Number(btn.dataset.lat), Number(btn.dataset.lon), btn.dataset.name, 8);
+      gateEl.classList.add("hidden");
+      moveTo(Number(btn.dataset.lat), Number(btn.dataset.lon), btn.dataset.name, 9);
       $("search").value = "";
       resultsEl.classList.remove("open");
-    });
-    document.addEventListener("click", (e) => {
-      if (!e.target.closest(".search-wrap") && !e.target.closest("#results")) {
-        resultsEl.classList.remove("open");
-      }
     });
   }
 
   async function start() {
     initMap();
     bind();
-    $("placeName").textContent = current.name || "Finding you…";
-    showGate();
+    $("placeName").textContent = current.name || "Finding you\u2026";
+    if (current.name && current.name !== "Finding you\u2026") {
+      loadWeather();
+      loadAlerts();
+    }
+    await loadRadar();
     setInterval(loadRadar, 5 * 60 * 1000);
     setInterval(loadWeather, 10 * 60 * 1000);
     setInterval(loadAlerts, 5 * 60 * 1000);
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("./sw.js?v=5").catch(() => {});
-    }
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js?v=6").catch(() => {});
   }
 
   start();
