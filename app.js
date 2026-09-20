@@ -68,24 +68,21 @@
   }
   function wxInfo(code) { return WX[code] || ["Conditions unavailable", "\uD83C\uDF21\uFE0F"]; }
 
-  function formatFrameTime(unix, kind) {
-    const d = new Date(unix * 1000);
-    const time = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-    if (kind === "nowcast") return time;
-    return time;
+  function formatFrameTime(unix) {
+    return new Date(unix * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   }
 
   function initMap() {
     map = L.map("map", {
       zoomControl: false,
       attributionControl: true,
-      maxZoom: 13
-    }).setView([current.lat, current.lon], current.name === "Finding you\u2026" ? 4 : 9);
+      minZoom: 4,
+      maxZoom: 8
+    }).setView([current.lat, current.lon], current.name === "Finding you\u2026" ? 4 : 7);
 
     L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}", {
       attribution: "Tiles \u00a9 Esri",
-      maxZoom: 16,
-      detectRetina: true
+      maxZoom: 16
     }).addTo(map);
 
     L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}", {
@@ -102,7 +99,7 @@
     }).addTo(map);
   }
 
-  function moveTo(lat, lon, name, zoom = 9) {
+  function moveTo(lat, lon, name, zoom = 7) {
     current = { lat, lon, name };
     savePlace(current);
     map.setView([lat, lon], zoom);
@@ -149,8 +146,7 @@
   }
 
   function radarUrl(frame) {
-    const size = window.devicePixelRatio >= 2 ? 512 : 256;
-    return `${apiData.host}${frame.path}/${size}/{z}/{x}/{y}/2/1_1.png`;
+    return `${apiData.host}${frame.path}/256/{z}/{x}/{y}/2/1_1.png`;
   }
 
   function showFrame(index) {
@@ -158,7 +154,7 @@
     frameIndex = Math.max(0, Math.min(frames.length - 1, index));
     const frame = frames[frameIndex];
     $("slider").value = String(frameIndex);
-    $("frameTime").textContent = formatFrameTime(frame.time, frame.kind);
+    $("frameTime").textContent = formatFrameTime(frame.time);
     if (frame.kind === "nowcast") $("frameHint").textContent = "forecast scan";
     else if (frameIndex === latestPastIndex) $("frameHint").textContent = "live";
     else $("frameHint").textContent = "recent scan";
@@ -166,10 +162,9 @@
     const layer = L.tileLayer(radarUrl(frame), {
       opacity: 0.78,
       tileSize: 256,
-      zoomOffset: 0,
       maxNativeZoom: 7,
-      maxZoom: 13,
-      detectRetina: true,
+      maxZoom: 8,
+      detectRetina: false,
       attribution: "Radar \u00a9 RainViewer"
     });
     layer.addTo(map);
@@ -312,7 +307,7 @@
         const lat = pos.coords.latitude;
         const lon = pos.coords.longitude;
         const name = await placeName(lat, lon);
-        moveTo(lat, lon, name, 10);
+        moveTo(lat, lon, name, 7);
         gateEl.classList.add("hidden");
         toast("Using your location");
         resolve(true);
@@ -343,7 +338,7 @@
       const btn = e.target.closest("button[data-lat]");
       if (!btn) return;
       gateEl.classList.add("hidden");
-      moveTo(Number(btn.dataset.lat), Number(btn.dataset.lon), btn.dataset.name, 9);
+      moveTo(Number(btn.dataset.lat), Number(btn.dataset.lon), btn.dataset.name, 7);
       $("search").value = "";
       resultsEl.classList.remove("open");
     });
@@ -361,7 +356,7 @@
     setInterval(loadRadar, 5 * 60 * 1000);
     setInterval(loadWeather, 10 * 60 * 1000);
     setInterval(loadAlerts, 5 * 60 * 1000);
-    if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js?v=6").catch(() => {});
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js?v=7").catch(() => {});
   }
 
   start();
