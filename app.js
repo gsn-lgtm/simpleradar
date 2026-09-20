@@ -37,7 +37,7 @@
   const gateEl = $("locGate");
   const sheetEl = $("sheet");
 
-  let map, marker, apiData = null;
+  let map, marker;
   let frames = [];
   let frameIndex = 0;
   let radarLayer = null;
@@ -57,6 +57,10 @@
     try { localStorage.setItem("simpleradar-place", JSON.stringify(place)); } catch (_) {}
   }
   function dismissedKey(id) { return `simpleradar-alert-${id}`; }
+  function pad(n) { return String(n).padStart(2, "0"); }
+  function iemStamp(d) {
+    return d.getUTCFullYear() + pad(d.getUTCMonth() + 1) + pad(d.getUTCDate()) + pad(d.getUTCHours()) + pad(d.getUTCMinutes());
+  }
 
   function toast(msg, ms = 2200) {
     toastEl.textContent = msg;
@@ -67,7 +71,6 @@
     return ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Math.round(deg / 45) % 8];
   }
   function wxInfo(code) { return WX[code] || ["Conditions unavailable", "\uD83C\uDF21\uFE0F"]; }
-
   function formatFrameTime(unix) {
     return new Date(unix * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   }
@@ -121,32 +124,36 @@
     }
   }
 
-  async function loadRadar() {
-    pause();
-    try {
-      const res = await fetch("https://api.rainviewer.com/public/weather-maps.json");
-      apiData = await res.json();
-      const past = (apiData.radar && apiData.radar.past) ? apiData.radar.past.slice(-9) : [];
-      const nowcast = (apiData.radar && apiData.radar.nowcast) ? apiData.radar.nowcast : [];
-      frames = [
-        ...past.map((f) => ({ ...f, kind: "past" })),
-        ...nowcast.map((f) => ({ ...f, kind: "nowcast" }))
-      ];
-      if (!frames.length) {
-        $("frameTime").textContent = "No radar";
-        return;
-      }
-      latestPastIndex = Math.max(0, past.length - 1);
-      $("slider").max = String(frames.length - 1);
-      frameIndex = latestPastIndex;
-      showFrame(frameIndex);
-    } catch (_) {
-      $("frameTime").textContent = "Radar offline";
+  function buildRadarFrames() {
+    const end = new Date();
+    end.setUTCSeconds(0, 0);
+    const snap = end.getUTCMinutes() - (end.getUTCMinutes() % 5) - 5;
+    end.setUTCMinutes(snap);
+    const out = [];
+    for (let i = 12; i >= 1; i -= 1) {
+      const d = new Date(end.getTime() - i * 10 * 60 * 1000);
+      d.setUTCSeconds(0, 0);
+      d.setUTCMinutes(d.getUTCMinutes() - (d.getUTCMinutes() % 5));
+      out.push({ time: Math.floor(d.getTime() / 1000), stamp: iemStamp(d), kind: "past" });
     }
+    out.push({ time: Math.floor(Date.now() / 1000), stamp: null, kind: "live" });
+    return out;
+  }
+
+  function loadRadar() {
+    pause();
+    frames = buildRadarFrames();
+    latestPastIndex = frames.length - 1;
+    $("slider").max = String(frames.length - 1);
+    frameIndex = latestPastIndex;
+    showFrame(frameIndex);
   }
 
   function radarUrl(frame) {
-    return `${apiData.host}${frame.path}/256/{z}/{x}/{y}/2/1_1.png`;
+    if (frame.kind === "live") {
+      return "https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913/{z}/{x}/{y}.png";
+    }
+    return `https://mesonet.agron.iastate.edu/c/tile.py/1.0.0/ridge::USCOMP-N0Q-${frame.stamp}/{z}/{x}/{y}.png`;
   }
 
   function showFrame(index) {
@@ -155,17 +162,16 @@
     const frame = frames[frameIndex];
     $("slider").value = String(frameIndex);
     $("frameTime").textContent = formatFrameTime(frame.time);
-    if (frame.kind === "nowcast") $("frameHint").textContent = "forecast scan";
-    else if (frameIndex === latestPastIndex) $("frameHint").textContent = "live";
-    else $("frameHint").textContent = "recent scan";
+    $("frameHint").textContent = frame.kind === "live" ? "live" : "recent scan";
 
     const layer = L.tileLayer(radarUrl(frame), {
-      opacity: 0.78,
+      opacity: 0.82,
       tileSize: 256,
-      maxNativeZoom: 7,
+      maxNativeZoom: 10,
       maxZoom: 14,
       detectRetina: false,
-      attribution: "Radar \u00a9 RainViewer"
+      className: "radar-layer",
+      attribution: "Radar \u00a9 Iowa State IEM / NWS"
     });
     layer.addTo(map);
     if (radarLayer) {
@@ -352,11 +358,11 @@
       loadWeather();
       loadAlerts();
     }
-    await loadRadar();
+    loadRadar();
     setInterval(loadRadar, 5 * 60 * 1000);
     setInterval(loadWeather, 10 * 60 * 1000);
     setInterval(loadAlerts, 5 * 60 * 1000);
-    if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js?v=8").catch(() => {});
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js?v=9").catch(() => {});
   }
 
   start();
