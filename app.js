@@ -77,8 +77,8 @@
       zoomControl: false,
       attributionControl: true,
       minZoom: 4,
-      maxZoom: 8
-    }).setView([current.lat, current.lon], current.name === "Finding you\u2026" ? 4 : 7);
+      maxZoom: 14
+    }).setView([current.lat, current.lon], current.name === "Finding you\u2026" ? 4 : 8);
 
     L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}", {
       attribution: "Tiles \u00a9 Esri",
@@ -99,7 +99,7 @@
     }).addTo(map);
   }
 
-  function moveTo(lat, lon, name, zoom = 7) {
+  function moveTo(lat, lon, name, zoom = 10) {
     current = { lat, lon, name };
     savePlace(current);
     map.setView([lat, lon], zoom);
@@ -163,7 +163,7 @@
       opacity: 0.78,
       tileSize: 256,
       maxNativeZoom: 7,
-      maxZoom: 8,
+      maxZoom: 14,
       detectRetina: false,
       attribution: "Radar \u00a9 RainViewer"
     });
@@ -307,7 +307,7 @@
         const lat = pos.coords.latitude;
         const lon = pos.coords.longitude;
         const name = await placeName(lat, lon);
-        moveTo(lat, lon, name, 7);
+        moveTo(lat, lon, name, 10);
         gateEl.classList.add("hidden");
         toast("Using your location");
         resolve(true);
@@ -338,7 +338,7 @@
       const btn = e.target.closest("button[data-lat]");
       if (!btn) return;
       gateEl.classList.add("hidden");
-      moveTo(Number(btn.dataset.lat), Number(btn.dataset.lon), btn.dataset.name, 7);
+      moveTo(Number(btn.dataset.lat), Number(btn.dataset.lon), btn.dataset.name, 10);
       $("search").value = "";
       resultsEl.classList.remove("open");
     });
@@ -356,7 +356,7 @@
     setInterval(loadRadar, 5 * 60 * 1000);
     setInterval(loadWeather, 10 * 60 * 1000);
     setInterval(loadAlerts, 5 * 60 * 1000);
-    if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js?v=7").catch(() => {});
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js?v=8").catch(() => {});
   }
 
   start();
