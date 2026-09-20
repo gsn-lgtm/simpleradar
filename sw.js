@@ -1,8 +1,6 @@
-const CACHE = "simpleradar-v5";
+const CACHE = "simpleradar-v6";
 
-self.addEventListener("install", (event) => {
-  self.skipWaiting();
-});
+self.addEventListener("install", () => self.skipWaiting());
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
@@ -11,7 +9,6 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
-  const req = event.request;
-  if (req.method !== "GET") return;
-  event.respondWith(fetch(req).catch(() => caches.match(req)));
+  if (event.request.method !== "GET") return;
+  event.respondWith(fetch(event.request));
 });
